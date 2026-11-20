@@ -94,6 +94,8 @@ def _no_live_llm_or_guidance(monkeypatch):
     monkeypatch.setattr(job_routes, "get_guidance_fn", lambda: None)
     monkeypatch.setattr(job_routes, "get_evidence_resources", lambda: {"posting_index": None, "graph": None})
     monkeypatch.setattr(job_routes, "_breaker", llm_explainer.CircuitBreaker())
+    # The "is this a job posting?" gate needs the embedder; route tests opt in (test_relevance_gate.py).
+    monkeypatch.setattr(job_routes, "get_relevance_fn", lambda: lambda text: (True, None, ["gate off in tests"]))
     yield
 
 

@@ -10,10 +10,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
 
-from backend.services import llm_explainer
+from backend.services import llm_explainer, relevance, url_fetch
 from backend.services.dataset import TEXT_FIELDS, build_text, clean_field
 from backend.services.evidence import build_evidence
-from backend.services.job_analysis import build_job_report, insufficient_report
+from backend.services.job_analysis import build_job_report, insufficient_report, not_job_posting_report
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env")
@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 job_bp = Blueprint("job_routes", __name__)
 MAX_TEXT_CHARS = 20_000
 MIN_POSTING_CHARS = 30  # same minimum the frontend applies to a pasted posting
+MIN_LETTER_SHARE = 0.20  # text with fewer letters than this (among non-space characters) is symbols or digits
+FETCH_FAILED_MESSAGE = "Could not read this page. Paste the job text instead."
 BODY_FIELDS = ("description", "requirements", "benefits")
 
 # Decided by the classifier and rules; nothing after build_job_report may change them.
@@ -90,6 +92,11 @@ def get_guidance_fn():
     return default_guidance
 
 
+def get_relevance_fn():
+    """The "is this a job posting?" gate; tests replace it with a pass-through or a fake."""
+    return relevance.is_job_posting
+
+
 def get_llm_client():
     return llm_explainer.client_from_env()
 
@@ -126,6 +133,29 @@ def has_too_little_text(payload: dict) -> bool:
     has_body = any(cleaned[field] for field in BODY_FIELDS)
     total = len(" ".join(value for value in cleaned.values() if value))
     return not has_body or total < MIN_POSTING_CHARS
+
+
+def has_too_few_letters(payload: dict) -> bool:
+    """Mostly symbols or digits: fewer than MIN_LETTER_SHARE letters among the non-space characters."""
+    text = " ".join(clean_field(payload.get(field)) or "" for field in TEXT_FIELDS)
+    visible = [ch for ch in text if not ch.isspace()]
+    return not visible or sum(ch.isalpha() for ch in visible) / len(visible) < MIN_LETTER_SHARE
+
+
+_NO_URL = object()
+
+
+def requested_url(payload):
+    """The link to fetch: a {"url": ...} field, or pasted text that is only one http(s) link. _NO_URL otherwise."""
+    if not isinstance(payload, dict):
+        return _NO_URL
+    if "url" in payload:
+        return payload["url"]
+    if not is_structured_request(payload):
+        url = url_fetch.single_url(payload.get("text"))
+        if url is not None:
+            return url
+    return _NO_URL
 
 
 def add_evidence_and_explanation(report: dict, text: str, posting_fields: dict) -> dict:
@@ -195,8 +225,34 @@ def analyze_job_route():
 
     Both shapes use structured_posting: the model text and the "profile present" check
     for the verdict come from the same cleaned profile (HTML-only or entity-only = empty).
+
+    A link ({"url": ...}, or pasted text that is only one http(s) URL) is fetched and its
+    extracted fields go through the same pipeline; a page that cannot be read returns 422.
+    Order of checks: empty -> 400, too long -> 413, mostly symbols or digits or too little
+    text -> Insufficient Information, not a job posting -> Not a Job Posting, then the classifier.
     """
     payload = request.get_json(silent=True)
+    source = None
+
+    url = requested_url(payload)
+    if url is not _NO_URL:
+        if not isinstance(url, str) or not url.strip():
+            return jsonify({"error": "Please provide the job posting text or a link."}), 400
+        try:
+            page = url_fetch.fetch_job_page(url.strip())
+        except url_fetch.FetchError as exc:
+            # The code only; never the URL path, the page or provider text.
+            logger.info("Job page could not be read: %s", exc.code)
+            return jsonify({"error": FETCH_FAILED_MESSAGE, "error_code": exc.code}), 422
+        user_profile = payload.get("company_profile")
+        fields = dict(page.fields)
+        if fields.get("company_profile") is None and isinstance(user_profile, str):
+            fields["company_profile"] = user_profile
+        payload = fields
+        source = {"domain": page.domain, "extraction": page.method}
+        if page.location:
+            source["job_location"] = page.location
+
     structured = is_structured_request(payload)
 
     if not structured:
@@ -227,9 +283,19 @@ def analyze_job_route():
             )
         }), 413
 
-    if structured and has_too_little_text(payload):
-        # Only a title/profile, or a few words: not enough to score. No classifier, evidence or LLM.
-        return jsonify(insufficient_report()), 200
+    def with_source(report: dict) -> dict:
+        if source is not None:
+            report["source"] = source
+        return report
+
+    if has_too_few_letters(payload) or has_too_little_text(payload):
+        # Symbols/digits, only a title/profile, or a few words: not enough to score. No classifier, evidence or LLM.
+        return jsonify(with_source(insufficient_report())), 200
+
+    looks_like_job, relevance_score, _ = get_relevance_fn()(relevance.gate_text(payload))
+    if not looks_like_job:
+        # Not a job posting: the classifier never scores it. No evidence or LLM either.
+        return jsonify(with_source(not_job_posting_report())), 200
 
     try:
         classifier = get_classifier()
@@ -263,5 +329,8 @@ def analyze_job_route():
 
     # Retrieval evidence and a grounded explanation; the verdict and scores stay fixed.
     report = add_evidence_and_explanation(report, text, posting_fields)
+    if relevance.needs_note(looks_like_job, relevance_score):
+        # New field only: the verdict and scores are unchanged; the page shows this as a caution line.
+        report["relevance_note"] = relevance.RELEVANCE_NOTE
 
-    return jsonify(report), 200
+    return jsonify(with_source(report)), 200

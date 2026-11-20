@@ -2,7 +2,7 @@ import GuidanceCards from "./components/GuidanceCards.jsx";
 import PdfButton from "./components/PdfButton.jsx";
 import ScoreRing from "./components/ScoreRing.jsx";
 import { highlightSegments } from "./services/highlight.js";
-import { buildMainScreen, technicalDetails } from "./services/reportView.js";
+import { buildMainScreen, sourceLine, technicalDetails } from "./services/reportView.js";
 
 // Marks only the phrases the report lists as the matched text of a warning sign (see services/highlight.js).
 export function Highlighted({ text, signs }) {
@@ -84,6 +84,7 @@ function HowDecided({ report }) {
 // the footer line, then the collapsed technical section. All text comes from buildMainScreen.
 export default function JobReport({ report }) {
   const screen = buildMainScreen(report);
+  const source = sourceLine(report);
 
   return (
     <aside className="panel">
@@ -91,6 +92,7 @@ export default function JobReport({ report }) {
         <h2>Job posting report</h2>
         <PdfButton title="Job posting report" />
       </div>
+      {source && <p className="source-line">{source}</p>}
 
       {screen.headline && (
         <div className={`verdict ${screen.level}`} role="status">
@@ -105,6 +107,10 @@ export default function JobReport({ report }) {
 
       {screen.sentence && (
         <p className={`plain-verdict ${screen.level}`}>{screen.sentence}</p>
+      )}
+
+      {screen.relevanceNote && (
+        <p className="relevance-note" role="note">{screen.relevanceNote}</p>
       )}
 
       {typeof screen.score === "number" && (

@@ -12,8 +12,24 @@ export const PLAIN_SENTENCES = {
   scam: "This looks like a scam. Do not pay or share personal details.",
 };
 
+export const INSUFFICIENT = "Insufficient Information";
+export const NOT_A_JOB = "Not a Job Posting";
+// Verdicts the server gives without running the classifier: no score circle, no evidence, no PDF button.
+export const NO_SCORE_VERDICTS = [INSUFFICIENT, NOT_A_JOB];
+
+export function isNoScoreVerdict(report) {
+  return Boolean(report) && NO_SCORE_VERDICTS.includes(report.verdict);
+}
+
+// "Source: jobs.example.com" for a report made from a pasted link, "" otherwise. Only the domain, with no claim
+// that the site is safe or unsafe.
+export function sourceLine(report) {
+  const domain = report && report.source && typeof report.source.domain === "string" ? report.source.domain.trim() : "";
+  return domain ? `Source: ${domain}` : "";
+}
+
 // One plain sentence per verdict, shown at the top of a job report and in its chat bubble. "" when there is none
-// (chat reports, "Insufficient Information", reports without a verdict).
+// (chat reports, "Insufficient Information", "Not a Job Posting", reports without a verdict).
 export function plainSentence(report) {
   if (!report || report.type === "chat") return "";
   switch (report.verdict) {
@@ -299,6 +315,8 @@ export function buildMainScreen(report) {
     similar,
     linked,
     footer: FOOTER_LINE,
+    // Server note for borderline text with few job words (never changes the verdict or score).
+    relevanceNote: typeof report.relevance_note === "string" ? report.relevance_note : "",
   };
 }
 
@@ -306,7 +324,7 @@ export function buildMainScreen(report) {
 export function mainScreenText(screen) {
   if (!screen) return [];
   return [
-    screen.headline, screen.sentence, screen.scoreText, screen.scoreNote,
+    screen.headline, screen.sentence, screen.relevanceNote, screen.scoreText, screen.scoreNote,
     ...screen.checked.flatMap((c) => [c.text, c.phrase || ""]),
     ...screen.next,
     ...(screen.why ? [screen.why.text, ...screen.why.sources.map((s) => s.title)] : []),

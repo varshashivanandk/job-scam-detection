@@ -1,0 +1,267 @@
+{
+  "rule": {
+    "MIN_WORDS_TO_JUDGE": 20,
+    "KEYWORD_REJECT_AT_MOST": 2.0,
+    "SEMANTIC_REJECT_BELOW": -0.15,
+    "NEWS_SEMANTIC_REJECT_BELOW": 0.1,
+    "STRICT_NEWS_CUES": [
+      "wire",
+      "said_on",
+      "attributed_quote",
+      "statement"
+    ],
+    "NOTE_BELOW": 0.05,
+    "prototypes": {
+      "job": [
+        "We are hiring a software engineer to join our team. Responsibilities include writing code and reviewing pull requests.",
+        "Job description: customer service representative, full-time, handling calls and emails from customers.",
+        "Requirements: bachelor's degree, three years of experience and strong communication skills. Apply with your resume.",
+        "Position: registered nurse. Benefits include health insurance, paid time off and a retirement plan.",
+        "Remote data entry assistant wanted. Flexible hours, weekly pay, no experience needed. Send your CV to apply.",
+        "Our company is looking for a sales manager to lead a regional team and meet quarterly targets.",
+        "Qualifications: proficiency in Excel, attention to detail, ability to work independently. Salary negotiable.",
+        "Internship opportunity for graduates in marketing. You will assist with campaigns and social media content.",
+        "Warehouse associate needed for night shifts. Duties include picking, packing and loading orders.",
+        "About the role: you will design, build and maintain cloud infrastructure. What we offer: competitive compensation."
+      ],
+      "non_job": [
+        "The minister said on Tuesday that the government would announce new measures, reporters were told.",
+        "The match ended in a draw after a late goal in stoppage time, and the team moved up the league table.",
+        "Add two cups of flour and a pinch of salt, then stir and bake for twenty minutes until golden.",
+        "I bought this phone last month. The battery life is great but the camera is disappointing. Three stars.",
+        "The moon rose softly over the silent hills, and the river sang a song of distant rain.",
+        "def main(): for item in items: print(item) return 0 import os import sys",
+        "Tomorrow will be cloudy with light rain in the afternoon and a high of 22 degrees.",
+        "Hey, are you free this weekend? Let's grab coffee and catch up, call me later.",
+        "Live updates: votes are being counted in the state election; see who is leading, who won the seat and by what margin.",
+        "In this lecture we explain the algorithm step by step: define the set, apply the rule to each element and repeat until nothing changes."
+      ]
+    }
+  },
+  "variants": {
+    "train_fields": {
+      "postings": 12504,
+      "judged": 12486,
+      "reached_semantic_check": 383,
+      "lowest_margin": -0.09041701257228851,
+      "with_strict_news_cue": 2,
+      "lowest_margin_with_news_cue": 0.31443414092063904,
+      "wrongly_rejected": 0,
+      "shown_relevance_note": 16
+    },
+    "train_description": {
+      "postings": 12504,
+      "judged": 12308,
+      "reached_semantic_check": 2746,
+      "lowest_margin": -0.13432735204696655,
+      "with_strict_news_cue": 7,
+      "lowest_margin_with_news_cue": 0.23018072545528412,
+      "wrongly_rejected": 0,
+      "shown_relevance_note": 105
+    },
+    "val_fields": {
+      "postings": 2681,
+      "judged": 2678,
+      "reached_semantic_check": 81,
+      "lowest_margin": -0.055019110441207886,
+      "with_strict_news_cue": 0,
+      "lowest_margin_with_news_cue": null,
+      "wrongly_rejected": 0,
+      "shown_relevance_note": 5
+    },
+    "val_description": {
+      "postings": 2681,
+      "judged": 2643,
+      "reached_semantic_check": 624,
+      "lowest_margin": -0.09909044951200485,
+      "with_strict_news_cue": 3,
+      "lowest_margin_with_news_cue": 0.17119035124778748,
+      "wrongly_rejected": 0,
+      "shown_relevance_note": 26
+    }
+  },
+  "non_job": [
+    {
+      "id": "news-1",
+      "kind": "news",
+      "keyword": -6.0,
+      "news_cue": true,
+      "semantic": -0.2471,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "news-2",
+      "kind": "news",
+      "keyword": -4.0,
+      "news_cue": true,
+      "semantic": -0.1124,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "news-3",
+      "kind": "news",
+      "keyword": -2.0,
+      "news_cue": true,
+      "semantic": -0.0156,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "news-4",
+      "kind": "news-about-hiring",
+      "keyword": -2.0,
+      "news_cue": true,
+      "semantic": 0.0372,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "sports-1",
+      "kind": "sports",
+      "keyword": 1.0,
+      "news_cue": false,
+      "semantic": -0.3319,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "sports-2",
+      "kind": "sports",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.6653,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "recipe-1",
+      "kind": "recipe",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.2895,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "recipe-2",
+      "kind": "recipe",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.3199,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "review-1",
+      "kind": "product-review",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.3174,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "review-2",
+      "kind": "product-review",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.0645,
+      "rejected": false,
+      "relevance_note": true
+    },
+    {
+      "id": "poem-1",
+      "kind": "poem",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.4139,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "poem-2",
+      "kind": "poem",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.3236,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "code-1",
+      "kind": "code",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.1828,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "code-2",
+      "kind": "code",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.05,
+      "rejected": false,
+      "relevance_note": true
+    },
+    {
+      "id": "weather-1",
+      "kind": "weather",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.3402,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "weather-2",
+      "kind": "weather",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.4519,
+      "rejected": true,
+      "relevance_note": false
+    },
+    {
+      "id": "blog-1",
+      "kind": "blog",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.1251,
+      "rejected": false,
+      "relevance_note": true
+    },
+    {
+      "id": "chat-1",
+      "kind": "chat",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.1302,
+      "rejected": false,
+      "relevance_note": true
+    },
+    {
+      "id": "encyclopedia-1",
+      "kind": "encyclopedia",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.0178,
+      "rejected": false,
+      "relevance_note": true
+    },
+    {
+      "id": "newsletter-1",
+      "kind": "newsletter",
+      "keyword": 0.0,
+      "news_cue": false,
+      "semantic": -0.109,
+      "rejected": false,
+      "relevance_note": true
+    }
+  ],
+  "postings_wrongly_rejected": 0,
+  "non_job_rejected": 14
+}

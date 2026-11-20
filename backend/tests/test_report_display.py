@@ -42,7 +42,8 @@ def test_job_reports_use_the_new_screen_and_only_chat_reports_keep_the_old_panel
 
 
 def test_the_main_screen_follows_the_requested_order():
-    markers = ["{screen.headline && (", "{screen.sentence && (", "{screen.scoreText && (", "<h3>What we checked</h3>",
+    markers = ["{screen.headline && (", "{screen.sentence && (", '{typeof screen.score === "number" && (',
+               "<h3>What we checked</h3>",
                "<h3>What to do next</h3>", "<h3>Why</h3>", "<h3>Similar known postings</h3>",
                "<h3>Linked companies and contacts</h3>", '<p className="footer-line">', "<HowDecided report={report} />"]
     positions = [MAIN.index(marker) for marker in markers]
@@ -59,8 +60,9 @@ def test_why_similar_and_linked_blocks_only_render_with_content_and_there_is_no_
 
 
 def test_the_main_screen_shows_one_score_in_the_requested_form():
-    assert MAIN.count("screen.scoreText") == 2 and "screen.scoreNote" in MAIN  # guard + render
-    assert "{screen.scoreText}" in MAIN and "{screen.scoreNote}" in MAIN
+    # One score, drawn as the score circle (owner request 2026-11-04): the number and the note, nothing else.
+    assert MAIN.count("<ScoreRing") == 1 and "<ScoreRing score={screen.score} note={screen.scoreNote} />" in MAIN
+    assert "screen.scoreText" not in MAIN
     assert 'return {score}' not in MAIN
     for source in (APP, JOB_REPORT):
         assert "classifier_risk_score" not in source  # the second figure is not read by the screen components
@@ -74,8 +76,10 @@ def test_how_this_was_decided_is_collapsed_by_default_and_holds_everything_techn
     open_tag = HOW_DECIDED[HOW_DECIDED.index("<details"):].split(">")[0]
     assert open_tag == '<details className="how-decided"' and "open" not in open_tag
     assert "<summary>How this was decided</summary>" in HOW_DECIDED
-    for part in ("tech.rows.map", "tech.rules.length > 0", "<GuidanceCards", "tech.notes.length > 0", "report.source_text"):
+    # The limitations list was removed from the page at the owner's request (2026-11-04).
+    for part in ("tech.rows.map", "tech.rules.length > 0", "<GuidanceCards", "report.source_text"):
         assert part in HOW_DECIDED
+    assert "Limitations and uncertainty" not in HOW_DECIDED
     for part in ("tech.rows", "tech.rules", "GuidanceCards", "tech.notes", "verdict_reason", "report.source_text"):
         assert part not in MAIN.replace("<HowDecided report={report} />", "")
 

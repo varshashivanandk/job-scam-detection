@@ -33,9 +33,11 @@ def test_chat_report_keeps_existing_limitations_and_adds_the_keyword_note():
     assert any(n.startswith("Messages from You") for n in notes)
 
 
-def test_the_ui_lists_every_uncertainty_note():
+def test_the_ui_no_longer_shows_the_limitations_section():
+    # The owner asked for the "Limitations and uncertainty" section to be removed from the page (2026-11-04);
+    # the API still returns uncertainty_notes (checked above), the frontend just does not render them.
     app = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "App.jsx").read_text(encoding="utf-8")
-    assert "uncertaintyNotes.map" in app  # chat notes, including the new one, are rendered from the report
+    assert "Limitations and uncertainty" not in app and "uncertaintyNotes.map" not in app
 
 
 def _fake_env(tmp_path):

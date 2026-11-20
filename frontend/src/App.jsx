@@ -18,7 +18,10 @@ import { conversationFile, OVERRIDE_LABEL, ROUTED_NOTE, routePastedText } from "
 import {
   chatPrediction, chatScore, clampDisplayScore, NO_FLAGGED_MESSAGES, showChatGuidance, splitExplanationNote,
 } from "./services/chatView.js";
-import { evidenceView, nextStepsFor, plainSentence } from "./services/reportView.js";
+import { busyLabel, singleUrl } from "./services/linkInput.js";
+import {
+  evidenceView, isNoScoreVerdict, nextStepsFor, NOT_A_JOB, plainSentence, sourceLine,
+} from "./services/reportView.js";
 
 const FIELD_LABELS = {
   title: "Title",
@@ -62,9 +65,18 @@ const VERDICT = {
     icon: "?",
     note: "Not enough text to assess. Add a description.",
   },
+  "Not a Job Posting": {
+    level: "neutral",
+    icon: "–",
+    note: "This does not look like a job posting. Paste a job advertisement to check it.",
+  },
 };
 
-const INSUFFICIENT = "Insufficient Information";
+// Short line in the chat bubble for the two verdicts that have no score.
+const NO_SCORE_HINT = {
+  "Insufficient Information": "No score: add a description.",
+  "Not a Job Posting": "No score: paste a job advertisement.",
+};
 
 const CHECKS = [
   "Upfront payment or registration fees",
@@ -73,21 +85,6 @@ const CHECKS = [
   "Urgent or pressuring language",
   "Moving the chat to another app",
   "Mismatched company and contact details",
-];
-
-const STEPS = [
-  [
-    "Paste or upload",
-    "Add a job posting, or an exported WhatsApp or Telegram chat as a .txt file.",
-  ],
-  [
-    "Warning signs are checked",
-    "The text is compared with known warning signs and similar past cases.",
-  ],
-  [
-    "Review the evidence",
-    "See the risk score, the evidence behind it, and what to verify next.",
-  ],
 ];
 
 function Logo({ size = 38 }) {
@@ -132,7 +129,7 @@ function Logo({ size = 38 }) {
   );
 }
 
-function VerdictBadge({ verdict, showNote = true }) {
+function VerdictBadge({ verdict, showNote = true, note = "" }) {
   const info = VERDICT[verdict];
 
   if (!info) return null;
@@ -145,7 +142,7 @@ function VerdictBadge({ verdict, showNote = true }) {
 
       <div>
         <strong>{verdict}</strong>
-        {showNote && <p className="v-note">{info.note}</p>}
+        {showNote && <p className="v-note">{note || info.note}</p>}
       </div>
     </div>
   );
@@ -493,11 +490,17 @@ function ReportPanel({ report, onChooseYou }) {
     );
   }
 
-  if (report.verdict === INSUFFICIENT) {
+  // Insufficient Information and Not a Job Posting: the classifier did not run, so no score, evidence or PDF.
+  if (isNoScoreVerdict(report)) {
+    const source = sourceLine(report);
     return (
       <aside className="panel">
         <h2>Job posting report</h2>
-        <VerdictBadge verdict={INSUFFICIENT} />
+        {source && <p className="source-line">{source}</p>}
+        <VerdictBadge
+          verdict={report.verdict}
+          note={report.verdict === NOT_A_JOB ? report.verdict_reason : ""}
+        />
       </aside>
     );
   }
@@ -621,11 +624,16 @@ export default function App() {
   const [report, setReport] = useState(null);
   const [input, setInput] = useState("");
   const [fields, setFields] = useState(EMPTY_FIELDS);
-  const [pasteMode, setPasteMode] = useState(false);
+  // Two ways in: paste the whole posting (default) or fill in the fields separately.
+  const [pasteMode, setPasteMode] = useState(true);
+  // In paste mode the company profile box stays folded until asked for.
+  const [profileOpen, setProfileOpen] = useState(false);
   // The input form folds away once an analysis starts so the results get the space.
   const [formOpen, setFormOpen] = useState(true);
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
+  // "Fetching page" while a pasted link is read, "Analyzing" otherwise.
+  const [busyText, setBusyText] = useState("Analyzing");
   const [examples, setExamples] = useState([]);
   const exampleIdx = useRef(0);
   const [exampleNote, setExampleNote] = useState("");
@@ -669,6 +677,7 @@ export default function App() {
     setFields(EMPTY_FIELDS);
     setFormError("");
     setFormOpen(true);
+    setProfileOpen(false);
   };
 
   const setField = (name, value) => {
@@ -679,6 +688,7 @@ export default function App() {
   // request is either { text, profile } (pasted posting) or { fields } (form).
   async function runJob(text, request) {
     add({ role: "user", text: request.userLabel || text });
+    setBusyText(request.fields ? busyLabel("") : busyLabel(request.text));
     setBusy(true);
     setFormOpen(false);
 
@@ -785,6 +795,13 @@ export default function App() {
 
     setInput("");
 
+    // A pasted link: the server fetches the page, so the length check and chat routing do not apply.
+    if (singleUrl(text)) {
+      runJob(text, { text, profile: fields.company_profile });
+      setField("company_profile", "");
+      return;
+    }
+
     if (text.length < 30) {
       add({ role: "user", text });
 
@@ -880,48 +897,9 @@ export default function App() {
       <div className="app">
         <main className="layout">
           <section className="chat" aria-label="Chat">
+            {/* The chat shows the results; while the form is open it takes the whole panel. */}
+            {!formOpen && (
             <div className="messages">
-              {messages.length === 0 && (
-                <div className="intro">
-                  <Logo size={56} />
-
-                  <h2>Is this job offer safe?</h2>
-
-                  <p>
-                    Paste a job posting or upload a recruiter chat. I point
-                    out warning signs and show the evidence. I can say
-                    something is potentially fraudulent, but I cannot prove it.
-                  </p>
-
-                  <div className="steps">
-                    {STEPS.map(([t, d], i) => (
-                      <div key={t} className="step">
-                        <span className="num">{i + 1}</span>
-                        <strong>{t}</strong>
-                        <span>{d}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="samples">
-                    <button
-                      onClick={() => {
-                        setPasteMode(true);
-                        setInput(SAMPLE_JOB);
-                      }}
-                    >
-                      Try a sample job posting
-                    </button>
-
-                    <button
-                      onClick={() => runChat(null, "sample_chat.txt")}
-                    >
-                      Try a sample chat
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {messages.map((m, i) => (
                 <div key={i} className={`row ${m.role}`}>
                   {m.role === "assistant" && (
@@ -951,10 +929,10 @@ export default function App() {
 
                     <p>{(m.report && plainSentence(m.report)) || splitExplanationNote(m.text).body}</p>
 
-                    {m.report?.verdict === INSUFFICIENT ? (
+                    {isNoScoreVerdict(m.report) ? (
                       <p className="inline-risk">
-                        <span className="chip neutral">{INSUFFICIENT}</span>
-                        <span>No score: add a description.</span>
+                        <span className="chip neutral">{m.report.verdict}</span>
+                        <span>{NO_SCORE_HINT[m.report.verdict]}</span>
                       </p>
                     ) : m.report &&
                       (VERDICT[m.report.verdict] &&
@@ -1025,7 +1003,7 @@ export default function App() {
                   </span>
 
                   <div className="bubble assistant typing">
-                    Analyzing
+                    {busyText}
                     <span>.</span>
                     <span>.</span>
                     <span>.</span>
@@ -1035,23 +1013,44 @@ export default function App() {
 
               <div ref={endRef} />
             </div>
+            )}
 
             {formOpen ? (
             <>
             <div className="job-form">
+              <div className="form-intro">
+                <Logo size={40} />
+                <div>
+                  <h2>Is this job offer safe?</h2>
+                  <p>
+                    Paste a job posting or upload a recruiter chat. We point out
+                    warning signs and show the evidence; we cannot prove fraud.
+                  </p>
+                </div>
+              </div>
+
               <div className="form-head">
-                <label className="mode-toggle">
-                  <input
-                    type="checkbox"
-                    checked={pasteMode}
-                    onChange={(e) => {
-                      setPasteMode(e.target.checked);
-                      setFormError("");
-                    }}
-                    disabled={busy}
-                  />
-                  Paste full posting instead
-                </label>
+                <div className="mode-tabs" role="tablist" aria-label="How to enter the job">
+                  {[
+                    [true, "Paste posting"],
+                    [false, "Fill in details"],
+                  ].map(([mode, label]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      role="tab"
+                      aria-selected={pasteMode === mode}
+                      className={pasteMode === mode ? "mode-tab active" : "mode-tab"}
+                      onClick={() => {
+                        setPasteMode(mode);
+                        setFormError("");
+                      }}
+                      disabled={busy}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
 
                 {messages.length > 0 && (
                   <button
@@ -1059,7 +1058,7 @@ export default function App() {
                     className="link-button"
                     onClick={() => setFormOpen(false)}
                   >
-                    Hide form
+                    Back to results
                   </button>
                 )}
               </div>
@@ -1086,28 +1085,8 @@ export default function App() {
                 </div>
               )}
 
-              <div className="field">
-                <label htmlFor="company-profile">
-                  Company profile <span className="muted">(optional)</span>
-                </label>
-                <textarea
-                  id="company-profile"
-                  value={fields.company_profile}
-                  onChange={(e) => setField("company_profile", e.target.value)}
-                  placeholder="Paste the 'About the company' section, if the posting has one..."
-                  rows={2}
-                  disabled={busy}
-                  aria-describedby="company-profile-note"
-                />
-                <p id="company-profile-note" className="field-note">
-                  Leaving this empty is treated as "no company profile". In our
-                  data, postings without one were about 6 times more often
-                  fraudulent, so an empty profile raises the risk estimate.
-                </p>
-              </div>
-
               {pasteMode && (
-                <div className="field">
+                <div className="field grow">
                   <label htmlFor="job-posting">Job posting</label>
                   <textarea
                     id="job-posting"
@@ -1119,10 +1098,46 @@ export default function App() {
                         send();
                       }
                     }}
-                    placeholder="Paste a job posting here..."
-                    rows={5}
+                    placeholder="Paste a job posting or a link here..."
+                    rows={8}
                     disabled={busy}
                   />
+                </div>
+              )}
+
+              {pasteMode && !profileOpen && !fields.company_profile ? (
+                <p className="profile-toggle">
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={() => setProfileOpen(true)}
+                    disabled={busy}
+                  >
+                    + Add the company profile
+                  </button>
+                  <span className="muted">
+                    {" "}(optional; leaving it out raises the risk estimate)
+                  </span>
+                </p>
+              ) : (
+                <div className="field">
+                  <label htmlFor="company-profile">
+                    Company profile <span className="muted">(optional)</span>
+                  </label>
+                  <textarea
+                    id="company-profile"
+                    value={fields.company_profile}
+                    onChange={(e) => setField("company_profile", e.target.value)}
+                    placeholder="Paste the 'About the company' section, if the posting has one..."
+                    rows={2}
+                    disabled={busy}
+                    aria-describedby="company-profile-note"
+                  />
+                  <p id="company-profile-note" className="field-note">
+                    Leaving this empty is treated as "no company profile". In our
+                    data, postings without one were about 6 times more often
+                    fraudulent, so an empty profile raises the risk estimate.
+                  </p>
                 </div>
               )}
 
@@ -1150,6 +1165,51 @@ export default function App() {
               )}
             </div>
 
+            <div className="try-row">
+              <span className="muted">Try:</span>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  setPasteMode(true);
+                  setInput(SAMPLE_JOB);
+                  setExampleNote("");
+                  setFormError("");
+                }}
+                disabled={busy}
+              >
+                a sample posting
+              </button>
+              <span className="muted" aria-hidden="true">·</span>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => runChat(null, "sample_chat.txt")}
+                disabled={busy}
+              >
+                a sample chat
+              </button>
+              {examples.length > 0 && (
+                <>
+                  <span className="muted" aria-hidden="true">·</span>
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={loadExample}
+                    disabled={busy}
+                    title="Examples come from the research dataset (contacts are hashed)."
+                  >
+                    an example from the dataset
+                  </button>
+                </>
+              )}
+            </div>
+            {exampleNote && (
+              <p className="example-note muted">
+                From the research dataset (contacts are hashed). {exampleNote}
+              </p>
+            )}
+
             <div className="composer">
               <input
                 ref={fileRef}
@@ -1168,23 +1228,6 @@ export default function App() {
               </button>
 
               <span className="composer-spacer" />
-
-              {!pasteMode && examples.length > 0 && (
-                <p className="example-row">
-                  <button type="button" onClick={loadExample} disabled={busy}>
-                    Load an example
-                  </button>
-                  <span className="muted">
-                    {" "}Examples come from the research dataset (contacts are hashed).
-                  </span>
-                  {exampleNote && (
-                    <span className="muted example-note">
-                      <br />
-                      {exampleNote}
-                    </span>
-                  )}
-                </p>
-              )}
 
               <button
                 className="primary"

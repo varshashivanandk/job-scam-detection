@@ -23,3 +23,7 @@ sentence-transformers
 
 # Entity graph (regex extraction, no spaCy)
 networkx>=3.0      # tested with 3.7
+
+# Link input (backend/services/url_fetch.py): fetch a pasted job page and extract its text
+requests>=2.31     # tested with 2.34.2
+beautifulsoup4>=4.12  # tested with 4.15.0 (html.parser, no lxml needed)

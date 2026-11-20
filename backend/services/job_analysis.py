@@ -315,6 +315,21 @@ def insufficient_report() -> dict:
     }
 
 
+VERDICT_NOT_JOB = "Not a Job Posting"
+NOT_JOB_MESSAGE = "This does not look like a job posting. Paste a job advertisement to check it."
+
+
+def not_job_posting_report() -> dict:
+    """Report for text the relevance gate judged not to be a job posting; no classifier, evidence or LLM."""
+    return {
+        **insufficient_report(),
+        "verdict": VERDICT_NOT_JOB,
+        "verdict_reason": NOT_JOB_MESSAGE,
+        "explanation": NOT_JOB_MESSAGE,
+        "uncertainty_notes": ["The classifier was not run because the text does not look like a job posting."],
+    }
+
+
 def job_verdict(
     fraud_probability: float,
     threshold: float,

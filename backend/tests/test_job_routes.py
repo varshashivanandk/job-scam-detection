@@ -84,18 +84,18 @@ def test_too_long_text_is_rejected(make_client):
 
 
 def test_missing_model_gives_503(make_client):
-    response = post(make_client(load_error=FileNotFoundError("model dir")), {"text": "A job posting."})
+    response = post(make_client(load_error=FileNotFoundError("model dir")), {"text": "A job posting for a warehouse assistant."})
     assert response.status_code == 503
     assert "not installed" in response.get_json()["error"]
 
 
 def test_load_failure_gives_503(make_client):
-    response = post(make_client(load_error=ImportError("torch missing")), {"text": "A job posting."})
+    response = post(make_client(load_error=ImportError("torch missing")), {"text": "A job posting for a warehouse assistant."})
     assert response.status_code == 503
 
 
 def test_prediction_failure_gives_500_without_leaking_text(make_client):
-    secret = "my private posting text 12345"
+    secret = "my private posting text 12345 for a clerk role"
     response = post(make_client(FakeClassifier(error=RuntimeError(secret))), {"text": secret})
     assert response.status_code == 500
     assert secret not in response.get_data(as_text=True)
@@ -107,6 +107,8 @@ from backend.services import llm_explainer as _lx
 
 FIXED_KEYS = job_routes.FIXED_REPORT_KEYS
 FEE_POSTING = {"text": "Pay a registration fee to start.", "company_profile": "Acme Ltd"}
+# At least MIN_POSTING_CHARS (30): shorter pasted text now returns Insufficient Information.
+PAY_A_FEE = "Pay a fee before you start this job."
 
 
 class FakeLLM:
@@ -247,11 +249,11 @@ def test_structured_request_passes_fields_to_the_graph(make_client, monkeypatch)
 
 
 @pytest.mark.parametrize("body, verdict, reason", [
-    ({"text": "Pay a fee."}, "Needs Verification", "company profile not provided"),
-    ({"text": "Pay a fee.", "company_profile": None}, "Needs Verification", "company profile not provided"),
-    ({"text": "Pay a fee.", "company_profile": 42}, "Needs Verification", "company profile not provided"),
-    ({"text": "Pay a fee.", "company_profile": "  "}, "Needs Verification", None),
-    ({"text": "Pay a fee.", "company_profile": "Acme Ltd"}, "High Fraud Risk", None),
+    ({"text": PAY_A_FEE}, "Needs Verification", "company profile not provided"),
+    ({"text": PAY_A_FEE, "company_profile": None}, "Needs Verification", "company profile not provided"),
+    ({"text": PAY_A_FEE, "company_profile": 42}, "Needs Verification", "company profile not provided"),
+    ({"text": PAY_A_FEE, "company_profile": "  "}, "Needs Verification", None),
+    ({"text": PAY_A_FEE, "company_profile": "Acme Ltd"}, "High Fraud Risk", None),
 ])
 def test_flagged_posting_verdict_depends_on_company_profile(make_client, monkeypatch, body, verdict, reason):
     monkeypatch.setenv("ENABLE_LLM_ANALYSIS", "false")
@@ -265,7 +267,7 @@ def test_flagged_posting_verdict_depends_on_company_profile(make_client, monkeyp
 
 def test_unflagged_posting_is_likely_legitimate(make_client, monkeypatch):
     monkeypatch.setenv("ENABLE_LLM_ANALYSIS", "false")
-    data = post(make_client(FakeClassifier(0.01)), {"text": "Software engineer."}).get_json()
+    data = post(make_client(FakeClassifier(0.01)), {"text": "Software engineer, interview required."}).get_json()
     assert data["verdict"] == "Likely Legitimate"
 
 
@@ -276,7 +278,7 @@ def test_route_returns_display_risk_score_when_logodds_present(make_client, monk
         def predict(self, text):
             return dict(super().predict(text), fraud_logodds=3.0)
 
-    data = post(make_client(WithLogodds(0.95)), {"text": "Pay a fee."}).get_json()
+    data = post(make_client(WithLogodds(0.95)), {"text": PAY_A_FEE}).get_json()
     assert isinstance(data["display_risk_score"], int) and 50 <= data["display_risk_score"] <= 99
     assert data["risk_score"] >= 30 and data["verdict"] == "Needs Verification"
 
@@ -399,7 +401,8 @@ def test_enough_structured_text_is_scored(recording_client):
     assert len(classifier.seen) == 1
 
 
-def test_short_pasted_text_is_still_scored_and_has_no_minimum_length(recording_client):
+def test_short_pasted_text_returns_insufficient_information_and_skips_the_classifier(recording_client):
+    # Changed on purpose (owner request 2026-11-15): pasted text now has the same minimum as the form.
     client, classifier = recording_client
     data = post(client, {"text": "Pay a fee."}).get_json()
-    assert data["verdict"] != "Insufficient Information" and classifier.seen == ["Description: Pay a fee."]
+    assert data["verdict"] == "Insufficient Information" and classifier.seen == []
